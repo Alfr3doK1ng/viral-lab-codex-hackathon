@@ -20,6 +20,7 @@ export type VideoGenerationResult =
       startedAt: string;
       completedAt: string;
       videoUrl: string;
+      posterUrl?: string;
       diagnostics: string[];
     }
   | {
@@ -59,6 +60,7 @@ export async function generateOfflinePreviewVideo(brief: RemixBrief): Promise<Vi
     startedAt: STARTED_AT,
     completedAt: STARTED_AT,
     videoUrl: browserVideoUrl ?? fallbackVideoDataUrl(brief),
+    posterUrl: posterDataUrl(brief),
     diagnostics: [
       browserVideoUrl
         ? "Generated an offline WebM preview in the browser with Canvas and MediaRecorder."
@@ -111,6 +113,7 @@ export async function requestRealProviderGeneration(
         startedAt,
         completedAt: new Date().toISOString(),
         videoUrl: String(payload.videoUrl),
+        posterUrl: "posterUrl" in payload && payload.posterUrl ? String(payload.posterUrl) : undefined,
         diagnostics: ["Real provider returned a playable video URL."]
       };
     }
@@ -250,6 +253,50 @@ function fallbackVideoDataUrl(brief: RemixBrief): string {
     shots: brief.shots.map((shot) => shot.onScreenText)
   });
   return `data:video/webm;base64,${btoa(unescape(encodeURIComponent(content)))}`;
+}
+
+function posterDataUrl(brief: RemixBrief): string {
+  const firstShot = brief.shots[0];
+  const titleLines = svgTextLines(brief.title, 92, 180, 22, 58);
+  const shotLines = svgTextLines(firstShot.onScreenText, 92, 470, 28, 44);
+  const svg = `
+    <svg xmlns="http://www.w3.org/2000/svg" width="720" height="1280" viewBox="0 0 720 1280">
+      <rect width="720" height="1280" fill="#111214"/>
+      <rect x="54" y="96" width="612" height="1000" rx="24" fill="#f2eadb" stroke="#ec5b3f" stroke-width="10"/>
+      <g fill="#111214" font-family="Arial, sans-serif" font-size="50" font-weight="800">${titleLines}</g>
+      <text x="92" y="390" fill="#ec5b3f" font-family="Arial, sans-serif" font-size="44" font-weight="800">Shot 1</text>
+      <g fill="#111214" font-family="Arial, sans-serif" font-size="34" font-weight="800">${shotLines}</g>
+      <text x="92" y="1010" fill="#314a54" font-family="Arial, sans-serif" font-size="34" font-weight="700">${escapeXml(firstShot.timing)}</text>
+    </svg>
+  `;
+  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+}
+
+function svgTextLines(text: string, x: number, y: number, maxChars: number, lineHeight: number): string {
+  const lines: string[] = [];
+  let line = "";
+  for (const word of text.split(/\s+/)) {
+    const next = line ? `${line} ${word}` : word;
+    if (next.length > maxChars && line) {
+      lines.push(line);
+      line = word;
+    } else {
+      line = next;
+    }
+  }
+  if (line) lines.push(line);
+  return lines
+    .slice(0, 4)
+    .map((lineText, index) => `<text x="${x}" y="${y + index * lineHeight}">${escapeXml(lineText)}</text>`)
+    .join("");
+}
+
+function escapeXml(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
 }
 
 function failedRealProvider(startedAt: string, error: string): VideoGenerationResult {

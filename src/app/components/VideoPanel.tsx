@@ -61,9 +61,12 @@ export function VideoPanel({ video, canGenerate, isGenerating, onGenerate }: Pro
             aria-label="Generated video preview"
             data-testid="video-preview"
             src={video.videoUrl}
+            poster={video.posterUrl}
+            autoPlay
             controls
             muted
             loop
+            preload="auto"
             playsInline
           />
           <p>{video.diagnostics[0]}</p>
