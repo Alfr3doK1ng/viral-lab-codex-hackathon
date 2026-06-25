@@ -2,25 +2,25 @@
 
 ## Summary
 
-Viral Lab is a hackathon-ready web app that analyzes a short-form reference video, extracts reusable "viral DNA," runs an agent committee over the findings, and generates a new short-video production brief that is ready for Image 2 / Seedance 2.0 style generation.
+Viral Lab is a hackathon-ready web app that analyzes a TikTok-style short-form reference, extracts reusable "viral DNA," runs an agent committee over the findings, and generates a new short video. The final demo target is an actual playable video when local provider keys are present, with a deterministic offline preview provider when keys are absent.
 
-The first version is a hybrid demo. It performs deterministic local analysis and generation-brief synthesis so the browser demo and tests are reliable, while exposing clean API adapter boundaries for future real model calls.
+The first version is a hybrid demo. It performs deterministic local analysis and generation-brief synthesis so the browser demo and tests are reliable, while exposing provider boundaries for real Image 2 / Seedance 2.0 style generation.
 
 ## Product Goals
 
 - Demonstrate a spec-first, loop-engineering workflow that judges can recognize from the app itself.
 - Help creators understand why a TikTok-style reference might work without copying the original content.
-- Turn the analysis into a new concept, storyboard, prompt set, caption plan, and QA checklist.
+- Turn the analysis into a new concept, storyboard, prompt set, caption plan, QA checklist, and playable generated video.
 - Run fully in a local browser demo with deterministic data and no required API keys.
-- Keep the architecture ready for real image/video generation providers after the hackathon.
+- Use real provider keys from a local ignored file when present, without blocking the demo when that file is removed for judging.
 
 ## Non-Goals
 
 - Scraping TikTok or bypassing platform restrictions.
 - Downloading or reproducing copyrighted reference videos.
-- Producing a final rendered video in the first version.
 - Building user accounts, billing, collaboration, or persistent cloud storage.
 - Claiming real virality predictions. The score is an interpretable creative heuristic, not a guarantee.
+- Guaranteeing a specific third-party provider's uptime, latency, or output quality.
 
 ## Target User
 
@@ -28,10 +28,11 @@ The primary user is a creator, growth marketer, or hackathon judge who wants to 
 
 ## MVP Workflow
 
-1. User enters a TikTok-style URL, caption, transcript, creator niche, desired output niche, and optional public metrics.
-2. User may optionally upload a short local video file for demo completeness. Upload metadata is displayed, but video decoding is not required for the first version.
-3. User clicks **Analyze viral DNA**.
-4. The app validates the input and creates a deterministic analysis:
+1. User enters a TikTok URL as the primary reference. The app stores the URL as a reference and does not scrape protected TikTok content.
+2. User adds caption, transcript or scene notes, creator niche, desired output niche, and optional public metrics.
+3. User may optionally upload a short local video file for demo completeness. Upload metadata is displayed, but video decoding is not required for the first version.
+4. User clicks **Analyze viral DNA**.
+5. The app validates the input and creates a deterministic analysis:
    - viralness score
    - scoring dimensions
    - hook pattern
@@ -39,14 +40,14 @@ The primary user is a creator, growth marketer, or hackathon judge who wants to 
    - emotional arc
    - repeatability drivers
    - remix constraints
-5. The app runs an agent committee:
+6. The app runs an agent committee:
    - Analyst: summarizes the reference mechanics.
    - Strategist: identifies audience and distribution angle.
    - Director: maps the creative into shots and timing.
    - Prompt Engineer: writes model-ready image and video prompts.
    - QA Critic: flags risk, originality, and execution gaps.
-6. User clicks **Generate remix brief**.
-7. The app outputs a new, non-copying concept with:
+7. User clicks **Generate remix brief**.
+8. The app outputs a new, non-copying concept with:
    - concept title
    - one-sentence premise
    - first-three-seconds hook
@@ -57,14 +58,17 @@ The primary user is a creator, growth marketer, or hackathon judge who wants to 
    - negative prompts
    - caption and hashtag suggestions
    - readiness checklist
-8. User can copy or export the generated brief as JSON.
+9. User clicks **Generate video**.
+10. If real provider keys are available, the provider returns playable generated media or a provider job status that resolves to playable media.
+11. If real provider keys are absent, the offline preview provider returns a deterministic playable preview video assembled from the storyboard and clearly labeled as an offline preview.
+12. User can copy or export the generated brief and provider result as JSON.
 
 ## Functional Requirements
 
 ### Reference Intake
 
-- The intake form must accept a URL, caption, transcript, source niche, target niche, and optional metrics.
-- URL validation must allow `https://` URLs and reject empty or non-URL values.
+- The intake form must accept a TikTok URL, caption, transcript or scene notes, source niche, target niche, and optional metrics.
+- URL validation must allow `https://` TikTok URLs and reject empty or non-URL values.
 - Transcript and caption must have enough text to analyze. The minimum combined length is 30 characters.
 - Metrics are optional numeric fields for views, likes, comments, shares, saves, and reposts.
 - Optional upload must accept a browser `File` object and show filename, size, and MIME type.
@@ -106,10 +110,22 @@ The primary user is a creator, growth marketer, or hackathon judge who wants to 
 
 ### Provider Adapter Boundary
 
-- The implementation must define a generation provider interface with a mock provider as the default.
-- The provider interface must support future image and video generation calls without changing the UI workflow.
+- The implementation must define a generation provider interface with an offline preview provider as the default.
+- The provider interface must support real image and video generation calls without changing the UI workflow.
 - Missing API keys must not block the local demo.
-- The UI must label mock/fallback outputs honestly.
+- The UI must label offline preview outputs honestly.
+- Provider configuration must come from local environment variables or an ignored local key file, not hard-coded source files.
+- The app must never commit API keys, provider tokens, or generated secrets.
+- The app must support a real-provider path for Image 2 / Seedance 2.0 style generation when keys are present.
+
+### Final Video Generation
+
+- Video generation must require a completed remix brief.
+- The default offline preview provider must produce a playable video artifact or data URL from the storyboard without external API calls.
+- A real provider may return `queued`, `processing`, `succeeded`, or `failed` states.
+- The UI must show provider state, elapsed time, and the final playable video when available.
+- The UI must preserve the generated brief if provider generation fails.
+- The exported JSON must include the selected provider, provider state, final video URL or data URL, and any provider-safe diagnostics.
 
 ## UX Requirements
 
@@ -124,6 +140,7 @@ The primary user is a creator, growth marketer, or hackathon judge who wants to 
 - The app must work at desktop width around 1440px and mobile width around 390px.
 - The interface must make progress states clear for analysis and generation.
 - Errors must tell the user exactly what to fix.
+- The generated video panel must be visible in the first workflow view after a video has been generated.
 
 ## Visual Direction
 
@@ -147,7 +164,7 @@ Proposed unit boundaries:
 - `src/domain/scoring.ts`: viralness dimension scoring and score aggregation.
 - `src/domain/committee.ts`: deterministic agent committee generation.
 - `src/domain/brief.ts`: remix brief and storyboard generation.
-- `src/providers/generation.ts`: provider interface and mock generation provider.
+- `src/providers/generation.ts`: provider interface, offline preview provider, and real provider adapter boundary.
 - `src/app/App.tsx`: app shell and workflow state.
 - `src/app/components/*`: focused UI components for intake, analysis, committee, storyboard, and export.
 - `tests/unit/*`: unit tests for domain behavior.
@@ -223,6 +240,13 @@ type RemixBrief = {
   hashtags: string[];
   readinessChecklist: string[];
 };
+
+type VideoGenerationState =
+  | { status: "idle" }
+  | { status: "queued"; provider: string; startedAt: string }
+  | { status: "processing"; provider: string; startedAt: string; progressLabel: string }
+  | { status: "succeeded"; provider: string; startedAt: string; completedAt: string; videoUrl: string }
+  | { status: "failed"; provider: string; startedAt: string; error: string };
 ```
 
 ## Error Handling
@@ -232,6 +256,9 @@ type RemixBrief = {
 - Missing target niche: show "Choose the audience you want the new video to reach."
 - Generation before analysis: disable the button and show analysis as the required prior step.
 - Export before brief generation: disable export until a brief exists.
+- Video generation without a brief: disable the button and show brief generation as the required prior step.
+- Missing provider keys: use the offline preview provider and label the result "Offline preview."
+- Provider failure: show the provider-safe error and keep the brief available.
 - Unexpected runtime error: show a concise recoverable error and preserve form input.
 
 ## Testing Requirements
@@ -243,19 +270,23 @@ type RemixBrief = {
   - committee output shape and role coverage
   - five-shot storyboard generation
   - export JSON completeness
+  - offline preview provider result shape
 - E2E tests must cover:
   - filling the form
   - running analysis
   - verifying the viral DNA strip appears
   - running brief generation
   - verifying five storyboard shots render
+  - generating a playable video preview without API keys
   - copying or exporting JSON
 - Browser verification must include desktop and mobile viewport checks.
 
 ## Acceptance Criteria
 
 - A new user can complete the happy-path workflow in under three minutes.
-- The app runs locally without API keys.
+- The app runs locally without API keys using the offline preview provider.
+- The app can generate or display a playable final video artifact in the local demo.
+- Real provider keys can be placed in a local ignored file for a higher-fidelity demo and removed before judging upload.
 - The analysis and generation outputs are deterministic for a fixed sample input.
 - The visible UI includes the judging-friendly loop: spec-first framing, agent committee, scoring, generation, and QA.
 - Unit tests pass.
@@ -271,13 +302,16 @@ type RemixBrief = {
 5. Point out the scoring dimensions and committee loop.
 6. Click **Generate remix brief**.
 7. Show the five-shot storyboard, prompts, negative prompts, and QA checklist.
-8. Export JSON and explain that the provider boundary is ready for Image 2 / Seedance 2.0.
+8. Click **Generate video**.
+9. Show the playable video result. If provider keys are present, this is the real provider result; if not, it is the labeled offline preview.
+10. Export JSON and explain that the provider boundary is ready for Image 2 / Seedance 2.0.
 
 ## Implementation Constraints
 
 - Use deterministic local logic for the first version.
 - Keep provider calls behind an interface.
-- Do not require backend services unless the chosen framework already provides them locally.
+- Do not require backend services unless needed to protect provider keys for real generation calls.
 - Prefer focused files and testable pure functions for the creative intelligence layer.
 - Avoid storing uploaded video contents beyond the current browser session.
 - Keep copy clear that generated output is a new brief inspired by patterns, not a copy of the reference.
+- Keep all local key files ignored by git and safe to remove before submitting the project for judging.
