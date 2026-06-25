@@ -23,7 +23,13 @@ export function ExportPanel({ exportJson, copyStatus, canExport, onCopy }: Props
       <p className="copy-status" aria-live="polite">
         {copyStatus}
       </p>
-      {exportJson ? <pre className="json-preview">{exportJson}</pre> : <p className="empty-state">The export appears after brief generation.</p>}
+      {exportJson ? (
+        <pre className="json-preview" data-testid="json-preview">
+          {exportJson}
+        </pre>
+      ) : (
+        <p className="empty-state">The export appears after brief generation.</p>
+      )}
     </section>
   );
 }

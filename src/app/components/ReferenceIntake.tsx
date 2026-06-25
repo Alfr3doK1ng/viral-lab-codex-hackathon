@@ -113,7 +113,7 @@ export function ReferenceIntake({ input, errors, isAnalyzing, onInputChange, onA
 
       <label className="upload-zone">
         <Upload size={18} />
-        <span>{input.upload ? input.upload.name : "Optional local clip"}</span>
+        <span data-testid="upload-name">{input.upload ? input.upload.name : "Optional local clip"}</span>
         <input
           type="file"
           accept="video/*"
