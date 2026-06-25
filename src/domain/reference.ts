@@ -13,6 +13,10 @@ export type UploadMetadata = {
   type: string;
 };
 
+export type CreatorImageAsset = UploadMetadata & {
+  dataUrl?: string;
+};
+
 export type ReferenceInput = {
   url: string;
   caption: string;
@@ -21,6 +25,8 @@ export type ReferenceInput = {
   targetNiche: string;
   metrics: ReferenceMetrics;
   upload?: UploadMetadata;
+  uploads?: UploadMetadata[];
+  creatorImage?: CreatorImageAsset;
 };
 
 export type NormalizedReference = ReferenceInput & {
@@ -45,6 +51,7 @@ export function validateReferenceInput(input: ReferenceInput): ValidationResult<
   const sourceNiche = input.sourceNiche.trim();
   const targetNiche = input.targetNiche.trim();
   const combinedText = `${caption} ${transcript}`.trim();
+  const uploads = normalizeUploads(input);
 
   if (!isHttpsTikTokUrl(url)) {
     errors.push({ field: "url", message: "Enter a valid https TikTok URL." });
@@ -77,7 +84,9 @@ export function validateReferenceInput(input: ReferenceInput): ValidationResult<
       sourceNiche: sourceNiche || "unspecified source niche",
       targetNiche,
       metrics: normalizeMetrics(input.metrics),
-      upload: input.upload ? normalizeUpload(input.upload) : undefined,
+      upload: uploads[0],
+      uploads,
+      creatorImage: input.creatorImage ? normalizeCreatorImage(input.creatorImage) : undefined,
       combinedText,
       textWordCount: countWords(combinedText)
     }
@@ -107,6 +116,20 @@ function normalizeUpload(upload: UploadMetadata): UploadMetadata {
     name: upload.name.trim(),
     size: Math.max(0, Math.round(upload.size)),
     type: upload.type.trim() || "application/octet-stream"
+  };
+}
+
+function normalizeUploads(input: ReferenceInput): UploadMetadata[] {
+  const uploads = input.uploads && input.uploads.length > 0 ? input.uploads : input.upload ? [input.upload] : [];
+  return uploads.map(normalizeUpload).filter((upload) => upload.name);
+}
+
+function normalizeCreatorImage(image: CreatorImageAsset): CreatorImageAsset {
+  return {
+    name: image.name.trim(),
+    size: Math.max(0, Math.round(image.size)),
+    type: image.type.trim() || "application/octet-stream",
+    dataUrl: image.dataUrl
   };
 }
 

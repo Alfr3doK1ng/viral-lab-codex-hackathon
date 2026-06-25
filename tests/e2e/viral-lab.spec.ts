@@ -16,6 +16,11 @@ const sampleReference = {
   }
 };
 
+const tinyPortraitPng = Buffer.from(
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=",
+  "base64"
+);
+
 async function fillReference(page: Page, overrides: Partial<typeof sampleReference> = {}) {
   const reference = {
     ...sampleReference,
@@ -121,7 +126,7 @@ test("keeps uploaded clip metadata in the generated export", async ({ page }) =>
   await page.goto("/");
   await fillReference(page);
 
-  await page.locator("input[type='file']").setInputFiles({
+  await page.getByTestId("reference-video-input").setInputFiles({
     name: "reference-hook.webm",
     mimeType: "video/webm",
     buffer: Buffer.from("demo clip bytes")
@@ -137,6 +142,62 @@ test("keeps uploaded clip metadata in the generated export", async ({ page }) =>
     size: 15,
     type: "video/webm"
   });
+});
+
+test("generates a portrait-led skit from two reference clips", async ({ page }) => {
+  await page.goto("/");
+  await fillReference(page, {
+    caption: "Campus skits escalate from business pitch to dorm snacks and a confused punchline.",
+    transcript:
+      "The two references use awkward business presentation beats, dorm-room chaos, free snacks, supplies, reaction cuts, and a final punchline that reveals the idea was accidentally useful.",
+    sourceNiche: "college dorm comedy skits",
+    targetNiche: "AI founder campus skit"
+  });
+
+  await page.getByTestId("reference-video-input").setInputFiles([
+    {
+      name: "Download (1).mp4",
+      mimeType: "video/mp4",
+      buffer: Buffer.from("first reference clip")
+    },
+    {
+      name: "Download (2).mp4",
+      mimeType: "video/mp4",
+      buffer: Buffer.from("second reference clip")
+    }
+  ]);
+  await page.getByTestId("creator-image-input").setInputFiles({
+    name: "Hanzhe.png",
+    mimeType: "image/png",
+    buffer: tinyPortraitPng
+  });
+
+  await expect(page.getByTestId("upload-name")).toContainText("2 clips");
+  await expect(page.getByTestId("creator-image-name")).toHaveText("Hanzhe.png");
+  await expect(page.getByTestId("creator-image-preview")).toBeVisible();
+
+  await analyzeReference(page);
+  await generateBrief(page);
+  await expect(
+    page.getByRole("heading", { name: /Hanzhe's AI Startup Snack Spiral/i })
+  ).toBeVisible();
+  await expect(
+    page.getByTestId("storyboard-shots").getByText("Accidental startup. Intentional demo.")
+  ).toBeVisible();
+
+  await generateVideo(page);
+  await expect(page.locator(".video-diagnostics").getByText(/creator image|Hanzhe/i)).toBeVisible();
+
+  const exportText = (await page.getByTestId("json-preview").textContent()) ?? "";
+  const bundle = JSON.parse(exportText);
+  expect(bundle.inputSummary.uploads).toHaveLength(2);
+  expect(bundle.inputSummary.creatorImage).toEqual({
+    name: "Hanzhe.png",
+    size: tinyPortraitPng.length,
+    type: "image/png"
+  });
+  expect(JSON.stringify(bundle.inputSummary.creatorImage)).not.toContain("data:image");
+  expect(bundle.brief.title).toMatch(/Hanzhe/i);
 });
 
 test("exports a judge-readable bundle after video generation", async ({ page }) => {

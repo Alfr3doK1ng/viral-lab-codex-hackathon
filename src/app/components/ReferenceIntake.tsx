@@ -1,5 +1,5 @@
-import { Upload, Wand2 } from "lucide-react";
-import type { FieldError, ReferenceInput, ReferenceMetrics } from "../../domain/reference";
+import { ImagePlus, Upload, Wand2 } from "lucide-react";
+import type { FieldError, ReferenceInput, ReferenceMetrics, UploadMetadata } from "../../domain/reference";
 
 type Props = {
   input: ReferenceInput;
@@ -20,6 +20,11 @@ const metricFields: Array<keyof ReferenceMetrics> = [
 
 export function ReferenceIntake({ input, errors, isAnalyzing, onInputChange, onAnalyze }: Props) {
   const errorFor = (field: string) => errors.find((error) => error.field === field)?.message;
+  const uploads = input.uploads && input.uploads.length > 0 ? input.uploads : input.upload ? [input.upload] : [];
+  const uploadLabel =
+    uploads.length > 1
+      ? `${uploads.length} clips: ${uploads.map((upload) => upload.name).join(", ")}`
+      : uploads[0]?.name ?? "Optional reference clips";
 
   function update<K extends keyof ReferenceInput>(field: K, value: ReferenceInput[K]) {
     onInputChange({ ...input, [field]: value });
@@ -33,6 +38,27 @@ export function ReferenceIntake({ input, errors, isAnalyzing, onInputChange, onA
         ...input.metrics,
         [field]: Number.isFinite(numberValue) ? numberValue : undefined
       }
+    });
+  }
+
+  function metadataFor(file: File): UploadMetadata {
+    return {
+      name: file.name,
+      size: file.size,
+      type: file.type
+    };
+  }
+
+  async function updateCreatorImage(file: File | undefined) {
+    if (!file) {
+      update("creatorImage", undefined);
+      return;
+    }
+
+    const dataUrl = await readFileAsDataUrl(file);
+    update("creatorImage", {
+      ...metadataFor(file),
+      dataUrl
     });
   }
 
@@ -113,19 +139,46 @@ export function ReferenceIntake({ input, errors, isAnalyzing, onInputChange, onA
 
       <label className="upload-zone">
         <Upload size={18} />
-        <span data-testid="upload-name">{input.upload ? input.upload.name : "Optional local clip"}</span>
+        <span data-testid="upload-name">{uploadLabel}</span>
         <input
+          data-testid="reference-video-input"
           type="file"
           accept="video/*"
+          multiple
           onChange={(event) => {
-            const file = event.target.files?.[0];
-            update(
-              "upload",
-              file ? { name: file.name, size: file.size, type: file.type } : undefined
-            );
+            const nextUploads = Array.from(event.target.files ?? []).map(metadataFor);
+            onInputChange({
+              ...input,
+              upload: nextUploads[0],
+              uploads: nextUploads
+            });
           }}
         />
       </label>
+
+      <label className="upload-zone creator-upload">
+        <ImagePlus size={18} />
+        <span data-testid="creator-image-name">
+          {input.creatorImage ? input.creatorImage.name : "Optional creator image"}
+        </span>
+        <input
+          data-testid="creator-image-input"
+          type="file"
+          accept="image/*"
+          onChange={(event) => {
+            void updateCreatorImage(event.target.files?.[0]);
+          }}
+        />
+      </label>
+      {input.creatorImage?.dataUrl ? (
+        <div className="creator-preview">
+          <img
+            data-testid="creator-image-preview"
+            src={input.creatorImage.dataUrl}
+            alt={`${input.creatorImage.name} portrait preview`}
+          />
+        </div>
+      ) : null}
 
       <button className="primary-action" type="button" onClick={onAnalyze} disabled={isAnalyzing}>
         <Wand2 size={18} />
@@ -133,4 +186,13 @@ export function ReferenceIntake({ input, errors, isAnalyzing, onInputChange, onA
       </button>
     </section>
   );
+}
+
+function readFileAsDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result ?? ""));
+    reader.onerror = () => reject(reader.error ?? new Error("Unable to read image file."));
+    reader.readAsDataURL(file);
+  });
 }

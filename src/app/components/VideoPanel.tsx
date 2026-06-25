@@ -69,7 +69,11 @@ export function VideoPanel({ video, canGenerate, isGenerating, onGenerate }: Pro
             preload="auto"
             playsInline
           />
-          <p>{video.diagnostics[0]}</p>
+          <ul className="video-diagnostics">
+            {video.diagnostics.map((diagnostic) => (
+              <li key={diagnostic}>{diagnostic}</li>
+            ))}
+          </ul>
         </div>
       ) : null}
     </section>

@@ -33,26 +33,35 @@ export type VideoGenerationResult =
 
 export type GenerationMode = "auto" | "offline" | "real";
 
+export type VideoGenerationAssets = {
+  creatorImageDataUrl?: string;
+  creatorName?: string;
+};
+
 const OFFLINE_PROVIDER = "Offline preview";
 const STARTED_AT = new Date(0).toISOString();
 
 export async function generateVideo(
   brief: RemixBrief,
-  mode: GenerationMode = "auto"
+  mode: GenerationMode = "auto",
+  assets: VideoGenerationAssets = {}
 ): Promise<VideoGenerationResult> {
   if (mode === "offline") {
-    return generateOfflinePreviewVideo(brief);
+    return generateOfflinePreviewVideo(brief, assets);
   }
 
   if (mode === "real" || configuredProviderMode() === "real") {
     return requestRealProviderGeneration(brief);
   }
 
-  return generateOfflinePreviewVideo(brief);
+  return generateOfflinePreviewVideo(brief, assets);
 }
 
-export async function generateOfflinePreviewVideo(brief: RemixBrief): Promise<VideoGenerationResult> {
-  const browserVideoUrl = await tryRecordCanvasPreview(brief);
+export async function generateOfflinePreviewVideo(
+  brief: RemixBrief,
+  assets: VideoGenerationAssets = {}
+): Promise<VideoGenerationResult> {
+  const browserVideoUrl = await tryRecordCanvasPreview(brief, assets);
 
   return {
     status: "succeeded",
@@ -60,11 +69,14 @@ export async function generateOfflinePreviewVideo(brief: RemixBrief): Promise<Vi
     startedAt: STARTED_AT,
     completedAt: STARTED_AT,
     videoUrl: browserVideoUrl ?? fallbackVideoDataUrl(brief),
-    posterUrl: posterDataUrl(brief),
+    posterUrl: posterDataUrl(brief, assets),
     diagnostics: [
       browserVideoUrl
         ? "Generated an offline WebM preview in the browser with Canvas and MediaRecorder."
         : "Generated an offline deterministic data URL because browser video recording is unavailable.",
+      assets.creatorImageDataUrl
+        ? `Composited creator image${assets.creatorName ? ` for ${assets.creatorName}` : ""} into the preview frames.`
+        : "No creator image was supplied for this preview.",
       "No API keys, provider tokens, source video downloads, or third-party calls were used."
     ]
   };
@@ -124,7 +136,14 @@ export async function requestRealProviderGeneration(
   }
 }
 
-async function tryRecordCanvasPreview(brief: RemixBrief): Promise<string | null> {
+type CanvasPreviewAssets = VideoGenerationAssets & {
+  creatorImage?: HTMLImageElement | null;
+};
+
+async function tryRecordCanvasPreview(
+  brief: RemixBrief,
+  assets: VideoGenerationAssets
+): Promise<string | null> {
   if (typeof document === "undefined" || typeof MediaRecorder === "undefined") {
     return null;
   }
@@ -155,19 +174,27 @@ async function tryRecordCanvasPreview(brief: RemixBrief): Promise<string | null>
   });
 
   recorder.start();
-  await drawStoryboardFrames(context, brief);
+  const canvasAssets: CanvasPreviewAssets = {
+    ...assets,
+    creatorImage: await loadBrowserImage(assets.creatorImageDataUrl)
+  };
+  await drawStoryboardFrames(context, brief, canvasAssets);
   recorder.stop();
   stream.getTracks().forEach((track) => track.stop());
   return stopped;
 }
 
-async function drawStoryboardFrames(context: CanvasRenderingContext2D, brief: RemixBrief): Promise<void> {
+async function drawStoryboardFrames(
+  context: CanvasRenderingContext2D,
+  brief: RemixBrief,
+  assets: CanvasPreviewAssets
+): Promise<void> {
   const frameMs = 650;
 
   for (const shot of brief.shots) {
     const start = performance.now();
     while (performance.now() - start < frameMs) {
-      drawFrame(context, brief, shot, (performance.now() - start) / frameMs);
+      drawFrame(context, brief, shot, (performance.now() - start) / frameMs, assets);
       await nextAnimationFrame();
     }
   }
@@ -177,7 +204,8 @@ function drawFrame(
   context: CanvasRenderingContext2D,
   brief: RemixBrief,
   shot: RemixBrief["shots"][number],
-  progress: number
+  progress: number,
+  assets: CanvasPreviewAssets
 ) {
   const { canvas } = context;
   const gradient = context.createLinearGradient(0, 0, canvas.width, canvas.height);
@@ -186,6 +214,11 @@ function drawFrame(
   gradient.addColorStop(1, "#efe6d2");
   context.fillStyle = gradient;
   context.fillRect(0, 0, canvas.width, canvas.height);
+
+  if (assets.creatorImage) {
+    drawCreatorFrame(context, brief, shot, progress, assets);
+    return;
+  }
 
   context.fillStyle = "rgba(246, 239, 227, 0.92)";
   context.fillRect(56, 104 + progress * 18, 608, 900);
@@ -212,6 +245,52 @@ function drawFrame(
   context.fillStyle = "#111214";
   context.font = "700 30px Inter, sans-serif";
   context.fillText(shot.timing, 92, 944);
+}
+
+function drawCreatorFrame(
+  context: CanvasRenderingContext2D,
+  brief: RemixBrief,
+  shot: RemixBrief["shots"][number],
+  progress: number,
+  assets: CanvasPreviewAssets
+) {
+  const image = assets.creatorImage;
+  if (!image) return;
+
+  context.fillStyle = "rgba(14, 15, 17, 0.72)";
+  context.fillRect(42, 72, 636, 1080);
+
+  context.fillStyle = "rgba(246, 239, 227, 0.94)";
+  context.fillRect(56, 92 + progress * 12, 608, 1010);
+  context.strokeStyle = "#ec5b3f";
+  context.lineWidth = 10;
+  context.strokeRect(56, 92 + progress * 12, 608, 1010);
+
+  drawImageCover(context, image, 88, 128, 236, 236, 22);
+
+  context.fillStyle = "#111214";
+  context.font = "800 42px Inter, sans-serif";
+  wrapText(context, brief.title, 356, 154, 260, 48);
+
+  context.fillStyle = "#3a4f59";
+  context.font = "700 24px Inter, sans-serif";
+  context.fillText(`Starring ${assets.creatorName ?? brief.persona?.creatorName ?? "creator"}`, 356, 360);
+
+  context.fillStyle = "#ec5b3f";
+  context.font = "800 38px Inter, sans-serif";
+  context.fillText(`Shot ${shot.id}`, 88, 486);
+
+  context.fillStyle = "#111214";
+  context.font = "700 35px Inter, sans-serif";
+  wrapText(context, shot.onScreenText, 88, 548, 544, 44);
+
+  context.fillStyle = "#3a4f59";
+  context.font = "500 25px Inter, sans-serif";
+  wrapText(context, shot.visual, 88, 750, 544, 34);
+
+  context.fillStyle = "#111214";
+  context.font = "800 30px Inter, sans-serif";
+  context.fillText(shot.timing, 88, 1032);
 }
 
 function wrapText(
@@ -246,6 +325,67 @@ function nextAnimationFrame(): Promise<void> {
   return new Promise((resolve) => requestAnimationFrame(() => resolve()));
 }
 
+function loadBrowserImage(dataUrl?: string): Promise<HTMLImageElement | null> {
+  if (!dataUrl || typeof Image === "undefined") {
+    return Promise.resolve(null);
+  }
+
+  return new Promise((resolve) => {
+    const image = new Image();
+    image.onload = () => resolve(image);
+    image.onerror = () => resolve(null);
+    image.src = dataUrl;
+  });
+}
+
+function drawImageCover(
+  context: CanvasRenderingContext2D,
+  image: HTMLImageElement,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  radius: number
+) {
+  const scale = Math.max(width / image.width, height / image.height);
+  const sourceWidth = width / scale;
+  const sourceHeight = height / scale;
+  const sourceX = (image.width - sourceWidth) / 2;
+  const sourceY = (image.height - sourceHeight) / 2;
+
+  context.save();
+  roundedRect(context, x, y, width, height, radius);
+  context.clip();
+  context.drawImage(image, sourceX, sourceY, sourceWidth, sourceHeight, x, y, width, height);
+  context.restore();
+
+  context.strokeStyle = "#111214";
+  context.lineWidth = 6;
+  roundedRect(context, x, y, width, height, radius);
+  context.stroke();
+}
+
+function roundedRect(
+  context: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  radius: number
+) {
+  context.beginPath();
+  context.moveTo(x + radius, y);
+  context.lineTo(x + width - radius, y);
+  context.quadraticCurveTo(x + width, y, x + width, y + radius);
+  context.lineTo(x + width, y + height - radius);
+  context.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
+  context.lineTo(x + radius, y + height);
+  context.quadraticCurveTo(x, y + height, x, y + height - radius);
+  context.lineTo(x, y + radius);
+  context.quadraticCurveTo(x, y, x + radius, y);
+  context.closePath();
+}
+
 function fallbackVideoDataUrl(brief: RemixBrief): string {
   const content = JSON.stringify({
     provider: OFFLINE_PROVIDER,
@@ -255,14 +395,24 @@ function fallbackVideoDataUrl(brief: RemixBrief): string {
   return `data:video/webm;base64,${btoa(unescape(encodeURIComponent(content)))}`;
 }
 
-function posterDataUrl(brief: RemixBrief): string {
+function posterDataUrl(brief: RemixBrief, assets: VideoGenerationAssets = {}): string {
   const firstShot = brief.shots[0];
   const titleLines = svgTextLines(brief.title, 92, 180, 22, 58);
   const shotLines = svgTextLines(firstShot.onScreenText, 92, 470, 28, 44);
+  const creatorImage = assets.creatorImageDataUrl
+    ? `
+      <clipPath id="portraitClip"><rect x="92" y="118" width="190" height="190" rx="24"/></clipPath>
+      <image href="${escapeXml(assets.creatorImageDataUrl)}" x="92" y="118" width="190" height="190" preserveAspectRatio="xMidYMid slice" clip-path="url(#portraitClip)"/>
+      <text x="306" y="260" fill="#314a54" font-family="Arial, sans-serif" font-size="28" font-weight="800">Starring ${escapeXml(
+        assets.creatorName ?? brief.persona?.creatorName ?? "creator"
+      )}</text>
+    `
+    : "";
   const svg = `
     <svg xmlns="http://www.w3.org/2000/svg" width="720" height="1280" viewBox="0 0 720 1280">
       <rect width="720" height="1280" fill="#111214"/>
       <rect x="54" y="96" width="612" height="1000" rx="24" fill="#f2eadb" stroke="#ec5b3f" stroke-width="10"/>
+      ${creatorImage}
       <g fill="#111214" font-family="Arial, sans-serif" font-size="50" font-weight="800">${titleLines}</g>
       <text x="92" y="390" fill="#ec5b3f" font-family="Arial, sans-serif" font-size="44" font-weight="800">Shot 1</text>
       <g fill="#111214" font-family="Arial, sans-serif" font-size="34" font-weight="800">${shotLines}</g>

@@ -51,6 +51,16 @@ describe("video generation providers", () => {
     expect(result.provider).toBe("Offline preview");
   });
 
+  it("records when a creator portrait is supplied to the offline preview", async () => {
+    const result = await generateOfflinePreviewVideo(briefFixture(), {
+      creatorImageDataUrl: "data:image/jpeg;base64,portrait",
+      creatorName: "Hanzhe"
+    });
+
+    expect(result.status).toBe("succeeded");
+    expect(result.diagnostics.join(" ")).toMatch(/creator image|Hanzhe/i);
+  });
+
   it("fails safely when the real provider endpoint is unavailable", async () => {
     const result = await requestRealProviderGeneration(briefFixture());
 

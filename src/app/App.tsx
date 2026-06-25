@@ -85,7 +85,10 @@ export function App() {
       progressLabel: "Rendering storyboard preview",
       diagnostics: ["Preparing the storyboard frames for video preview."]
     });
-    const result = await generateVideo(brief, "auto");
+    const result = await generateVideo(brief, "auto", {
+      creatorImageDataUrl: reference?.creatorImage?.dataUrl,
+      creatorName: brief.persona?.creatorName
+    });
     setVideo(result);
     setWorkingStep("idle");
   }

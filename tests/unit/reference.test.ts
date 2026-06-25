@@ -35,6 +35,37 @@ describe("validateReferenceInput", () => {
     expect(result.value.upload?.name).toBe("reference.mp4");
   });
 
+  it("normalizes multiple reference clips and a creator image", () => {
+    const result = validateReferenceInput({
+      ...validInput,
+      upload: undefined,
+      uploads: [
+        { name: " Download (1).mp4 ", size: 11751746.4, type: "video/mp4" },
+        { name: "Download (2).mp4", size: 15523873, type: "video/mp4" }
+      ],
+      creatorImage: {
+        name: " Hanzhe.jpeg ",
+        size: 34912.2,
+        type: "image/jpeg",
+        dataUrl: "data:image/jpeg;base64,portrait"
+      }
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.upload?.name).toBe("Download (1).mp4");
+    expect(result.value.uploads).toEqual([
+      { name: "Download (1).mp4", size: 11751746, type: "video/mp4" },
+      { name: "Download (2).mp4", size: 15523873, type: "video/mp4" }
+    ]);
+    expect(result.value.creatorImage).toEqual({
+      name: "Hanzhe.jpeg",
+      size: 34912,
+      type: "image/jpeg",
+      dataUrl: "data:image/jpeg;base64,portrait"
+    });
+  });
+
   it("rejects non-https TikTok URLs", () => {
     const result = validateReferenceInput({
       ...validInput,

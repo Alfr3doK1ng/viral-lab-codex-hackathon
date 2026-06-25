@@ -254,6 +254,38 @@ textarea[aria-invalid="true"] {
   opacity: 0;
 }
 
+.creator-upload {
+  margin-top: -4px;
+}
+
+.creator-preview {
+  display: grid;
+  grid-template-columns: 56px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  min-height: 72px;
+  margin: -2px 0 12px;
+  border: 1px solid rgba(246, 239, 227, 0.12);
+  border-radius: 8px;
+  padding: 8px;
+  background: rgba(246, 239, 227, 0.04);
+}
+
+.creator-preview::after {
+  content: "Portrait will be composited into the generated skit preview.";
+  color: #cfc6b8;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.creator-preview img {
+  width: 56px;
+  height: 56px;
+  border: 2px solid rgba(143, 212, 200, 0.6);
+  border-radius: 8px;
+  object-fit: cover;
+}
+
 .primary-action,
 .secondary-action {
   display: inline-flex;
@@ -341,6 +373,16 @@ textarea[aria-invalid="true"] {
 .empty-state,
 .video-state p,
 .video-result p {
+  color: #cfc6b8;
+  font-size: 13px;
+  line-height: 1.42;
+}
+
+.video-diagnostics {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding-left: 18px;
   color: #cfc6b8;
   font-size: 13px;
   line-height: 1.42;
